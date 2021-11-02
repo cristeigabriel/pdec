@@ -3155,9 +3155,9 @@ main()
 
     /* data */
     bool     is_valid_header      = pdec_is_valid_header(img);
-    uint32_t ihdr_data_chunk_size = get_ihdr_data_chunk_size(img);
+    uint32_t ihdr_data_chunk_size = pdec_get_ihdr_data_chunk_size(img);
 
-    PDEC_IHDR_DataChunk chunk = get_ihdr_data_chunk(img);
+    PDEC_IHDR_DataChunk chunk = pdec_get_ihdr_data_chunk(img);
 
     bool is_valid_ihdr = pdec_is_valid_ihdr(img);
 

@@ -48,7 +48,7 @@ pdec_is_valid_ihdr(const PDEC_ImageBytemap image)
 /* */
 
 uint32_t
-get_ihdr_data_chunk_size(const PDEC_ImageBytemap image)
+pdec_get_ihdr_data_chunk_size(const PDEC_ImageBytemap image)
 {
     return byteswap_uint32(*(uint32_t *)(image + sizeof(PDEC_Header)));
 }
@@ -56,7 +56,7 @@ get_ihdr_data_chunk_size(const PDEC_ImageBytemap image)
 /* */
 
 uint32_t
-get_ihdr_data_chunk_distance()
+pdec_get_ihdr_data_chunk_distance()
 {
     return sizeof(PDEC_Header) + sizeof(uint32_t) + sizeof(PDEC_IHDR);
 }
@@ -64,11 +64,11 @@ get_ihdr_data_chunk_distance()
 /* */
 
 PDEC_IHDR_DataChunk
-get_ihdr_data_chunk(const PDEC_ImageBytemap image)
+pdec_get_ihdr_data_chunk(const PDEC_ImageBytemap image)
 {
     PDEC_IHDR_DataChunk chunk = {0};
 
-    const uint32_t chunk_distance = get_ihdr_data_chunk_distance();
+    const uint32_t chunk_distance = pdec_get_ihdr_data_chunk_distance();
 
     chunk.m_w = byteswap_uint32(*(uint32_t *)(image + chunk_distance));
     chunk.m_h = byteswap_uint32(*(uint32_t *)(image + chunk_distance + 4));
@@ -86,7 +86,8 @@ get_ihdr_data_chunk(const PDEC_ImageBytemap image)
 ptrdiff_t
 pdec_get_first_crc_data_distance(const PDEC_ImageBytemap image)
 {
-    return get_ihdr_data_chunk_distance() + get_ihdr_data_chunk_size(image);
+    return pdec_get_ihdr_data_chunk_distance() +
+           pdec_get_ihdr_data_chunk_size(image);
 }
 
 /* */
@@ -320,7 +321,7 @@ pdec_get_rendering_intent_distance(const PDEC_ImageBytemap image)
 
 /* */
 
-uint32_t
+uint8_t
 pdec_get_rendering_intent(const PDEC_ImageBytemap image)
 {
     const ptrdiff_t rendering_intent_distance =
@@ -328,7 +329,7 @@ pdec_get_rendering_intent(const PDEC_ImageBytemap image)
 
     if (rendering_intent_distance == -EILSEQ)
     {
-        return PDEC_INVALID_UINT32;
+        return PDEC_INVALID_UINT8;
     }
 
     return *(uint8_t *)(image + rendering_intent_distance);
@@ -455,4 +456,92 @@ pdec_is_valid_eof(const PDEC_ImageBytemap image)
     const PDEC_CRC_Data eof =
         *(PDEC_CRC_Data *)(image + pdec_get_eof_distance(image));
     return byteswap_uint32(eof.v_value) == k_png_eof.v_value;
+}
+
+/* */
+
+PDEC_Status
+pdec_new_ctx(PDEC_Context *ctx, const PDEC_ImageBytemap image)
+{
+    if (ctx != NULL)
+    {
+        return PDEC_STATUS_INVALID;
+    }
+
+    const bool valid_header = pdec_is_valid_header(image);
+    const bool valid_ihdr   = pdec_is_valid_ihdr(image);
+    const bool valid_eof    = pdec_is_valid_eof(image);
+
+    if (!valid_header || !valid_ihdr || !valid_eof)
+    {
+        return PDEC_STATUS_INVALID;
+    }
+
+    ctx = (PDEC_Context *)malloc(sizeof *ctx);
+
+    ctx->m_ihdr_data_chunk =
+        (PDEC_IHDR_DataChunk *)malloc(sizeof *ctx->m_ihdr_data_chunk);
+    *ctx->m_ihdr_data_chunk     = pdec_get_ihdr_data_chunk(image);
+    ctx->m_ihdr_data_chunk_size = (ctx->m_ihdr_data_chunk != NULL)
+                                      ? pdec_get_ihdr_data_chunk_size(image)
+                                      : PDEC_INVALID_UINT32;
+
+    const bool present_iccp = pdec_is_present_iccp(image);
+
+    if (present_iccp)
+    {
+        ctx->m_iccp_data_chunk =
+            (PDEC_iCCP_DataChunk *)malloc(sizeof *ctx->m_iccp_data_chunk);
+        *ctx->m_iccp_data_chunk = pdec_get_iccp_data_chunk(image);
+    }
+
+    ctx->m_iccp_data_chunk_size = (present_iccp)
+                                      ? pdec_get_iccp_data_chunk_size(image)
+                                      : PDEC_INVALID_UINT32;
+
+    const bool present_srgb = pdec_is_present_srgb(image);
+
+    if (present_srgb)
+    {
+        ctx->m_srgb_data_chunk.m_rendering_intent =
+            pdec_get_rendering_intent(image);
+    }
+
+    ctx->m_srgb_data_chunk_size = (uint32_t)present_srgb;
+
+    ctx->m_crc_codes.m_first = pdec_get_first_crc_data(image);
+    ctx->m_crc_codes.m_last  = pdec_get_last_crc_data(image);
+
+    return PDEC_STATUS_VALID;
+}
+
+/* */
+
+PDEC_FreeState
+pdec_free_ctx(PDEC_Context *ctx)
+{
+    if (!ctx)
+    {
+        return PDEC_FREE_STATE_NO;
+    }
+
+    const bool ihdr_data_chunk = (ctx->m_ihdr_data_chunk != NULL);
+    const bool iccp_data_chunk = (ctx->m_iccp_data_chunk != NULL);
+    const bool idat_data_chunk = (ctx->m_idat_data_chunk != NULL);
+
+    free(ctx);
+
+    if (!ihdr_data_chunk && !iccp_data_chunk && !idat_data_chunk)
+    {
+        return PDEC_FREE_STATE_NO;
+    }
+
+    free(ctx->m_ihdr_data_chunk);
+    pdec_iccp_free_chunk_content(ctx->m_iccp_data_chunk);
+    free(ctx->m_iccp_data_chunk);
+    free(ctx->m_idat_data_chunk);
+
+    return ((ihdr_data_chunk & iccp_data_chunk & idat_data_chunk) == 0)
+               ? PDEC_FREE_STATE_PARTIAL
+               : PDEC_FREE_STATE_YES;
 }

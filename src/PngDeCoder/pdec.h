@@ -26,17 +26,13 @@
 typedef union
 {
     uint64_t v_value;
-
-    /* expect reversed endianness... */
-    uint8_t v_array[8];
+    uint8_t  v_array[8];
 } PDEC_Header;
 
 typedef union
 {
     uint32_t v_value;
-
-    /* expect reversed endianness... */
-    uint8_t v_array[4];
+    uint8_t  v_array[4];
 } PDEC_IHDR, PDEC_iCCP, PDEC_sRGB, PDEC_IDAT, PDEC_IEND, PDEC_CRC_Data;
 
 typedef struct
@@ -61,12 +57,42 @@ typedef struct
     uint8_t *m_compressed_profile;
 } PDEC_iCCP_DataChunk;
 
+typedef struct
+{
+    PDEC_IHDR_DataChunk *m_ihdr_data_chunk;
+    uint32_t             m_ihdr_data_chunk_size;
+
+    PDEC_iCCP_DataChunk *m_iccp_data_chunk;
+    uint32_t             m_iccp_data_chunk_size;
+
+    uint8_t *m_idat_data_chunk;
+    uint32_t m_idat_data_chunk_size;
+
+    struct
+    {
+        uint8_t m_rendering_intent;
+    } m_srgb_data_chunk;
+    uint32_t m_srgb_data_chunk_size;
+
+    struct
+    {
+        uint32_t m_first;
+        uint32_t m_last;
+    } m_crc_codes;
+} PDEC_Context;
+
 typedef enum
 {
     PDEC_FREE_STATE_NO = -1,
     PDEC_FREE_STATE_PARTIAL,
     PDEC_FREE_STATE_YES
 } PDEC_FreeState;
+
+typedef enum
+{
+    PDEC_STATUS_INVALID = 0,
+    PDEC_STATUS_VALID
+} PDEC_Status;
 
 typedef uintptr_t PDEC_ImageBytemap;
 
@@ -93,13 +119,13 @@ PDEC_EXTERN bool
 pdec_is_valid_ihdr(const PDEC_ImageBytemap image);
 
 PDEC_EXTERN uint32_t
-get_ihdr_data_chunk_size(const PDEC_ImageBytemap image);
+pdec_get_ihdr_data_chunk_size(const PDEC_ImageBytemap image);
 
 PDEC_EXTERN uint32_t
-get_ihdr_data_chunk_distance();
+pdec_get_ihdr_data_chunk_distance();
 
 PDEC_EXTERN PDEC_IHDR_DataChunk
-get_ihdr_data_chunk(const PDEC_ImageBytemap image);
+pdec_get_ihdr_data_chunk(const PDEC_ImageBytemap image);
 
 PDEC_EXTERN ptrdiff_t
 pdec_get_first_crc_data_distance(const PDEC_ImageBytemap image);
@@ -150,8 +176,8 @@ pdec_is_present_srgb(const PDEC_ImageBytemap image);
 PDEC_EXTERN ptrdiff_t
 pdec_get_rendering_intent_distance(const PDEC_ImageBytemap image);
 
-/* returns PDEC_INVALID_UINT32 upon failure */
-PDEC_EXTERN uint32_t
+/* returns PDEC_INVALID_UINT8 upon failure */
+PDEC_EXTERN uint8_t
 pdec_get_rendering_intent(const PDEC_ImageBytemap image);
 
 /* inherently guarantees presence of IDAT if works, for now
@@ -185,6 +211,15 @@ pdec_get_eof_distance(const PDEC_ImageBytemap image);
 PDEC_EXTERN bool
 pdec_is_valid_eof(const PDEC_ImageBytemap image);
 
+/* Context */
+
+/* remember to call pdec_free_ctx */
+PDEC_EXTERN PDEC_Status
+pdec_new_ctx(PDEC_Context *ctx, const PDEC_ImageBytemap image);
+
+PDEC_EXTERN PDEC_FreeState
+pdec_free_ctx(PDEC_Context *ctx);
+
 /* Constants */
 
 /* magic number */
@@ -203,3 +238,4 @@ const static PDEC_IEND     k_png_iend = {.v_value = 0x49454E44};
 const static PDEC_CRC_Data k_png_eof  = {.v_value = 0xAE426082};
 
 #define PDEC_INVALID_UINT32 (uint32_t)(-1)
+#define PDEC_INVALID_UINT8 (uint8_t)(-1)

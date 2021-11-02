@@ -2,11 +2,11 @@
 Simple, generally spec-compliant, hacky **P**NG **D**e**c**oder written in **C99**. In development!
 
 # To-do
+- [x] Structure all data with construction
 - [ ] IO PNG byte sequence loading
 - [ ] CMake setup for Linux
 - [ ] Finish ancillary chunks
 - [ ] Better error-handling
-- [ ] Structure all data with construction by generic IO
 - [ ] Add spew examples alongside images to README
 
 # Acknowledgements
